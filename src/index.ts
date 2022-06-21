@@ -29,6 +29,7 @@ export async function getSpaceDelegationsOut(
   network: string,
   snapshot: number | 'latest'
 ) {
+  addresses = addresses.map((address) => getAddress(address));
   const id = formatBytes32String(space);
   const options = { blockTag: snapshot };
   const multi = new shot.utils.Multicaller(network, shot.utils.getProvider(network), abi, options);
@@ -67,6 +68,7 @@ export async function getSpaceDelegationsIn(
       space: true
     }
   };
+  addresses = addresses.map((address) => getAddress(address));
   const { data } = await gqlQuery(subgraphs[network], query);
   const delegations = Object.fromEntries(addresses.map((address) => [address, []]));
   const baseDelegations = {};
@@ -101,6 +103,7 @@ export async function getSpaceDelegations(
   network: string,
   snapshot: number | 'latest'
 ) {
+  addresses = addresses.map((address) => getAddress(address));
   const [delegationsIn, delegationsOut] = await Promise.all([
     getSpaceDelegationsIn(space, addresses, network, snapshot),
     getSpaceDelegationsOut(space, addresses, network, snapshot)
