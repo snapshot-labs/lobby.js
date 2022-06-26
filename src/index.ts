@@ -1,3 +1,4 @@
+import fetch from 'cross-fetch';
 import { getAddress } from '@ethersproject/address';
 import { formatBytes32String } from '@ethersproject/strings';
 import shot from '@snapshot-labs/snapshot.js';
@@ -6,6 +7,7 @@ const CONTRACT = '0x469788fE6E9E9681C6ebF3bF78e7Fd26Fc015446';
 const EMPTY_ADDRESS = '0x0000000000000000000000000000000000000000';
 const EMPTY_SPACE = formatBytes32String('');
 const abi = ['function delegation(address, bytes32) view returns (address)'];
+const SCORE_API = 'https://score.snapshot.org/api/scores';
 
 export async function getSpaceDelegationsOut(
   space: string,
@@ -50,7 +52,7 @@ export async function getSpaceDelegationsIn(
       __args: {
         first: PAGE_SIZE,
         skip: 0,
-        block: snapshot !== 'latest' ? { number: snapshot } : undefined,
+        block: { number: snapshot },
         where: {
           space_in: ['', space],
           delegate_in: addresses
@@ -61,6 +63,8 @@ export async function getSpaceDelegationsIn(
       space: true
     }
   };
+  // @ts-ignore
+  if (snapshot === 'latest') delete query.delegations.__args.block;
 
   while (true) {
     query.delegations.__args.skip = page * PAGE_SIZE;
@@ -116,4 +120,61 @@ export async function getSpaceDelegations(
       }
     ])
   );
+}
+
+export async function getScores(
+  space: string,
+  strategies: any[],
+  network: string,
+  addresses: string[],
+  snapshot: number | 'latest',
+  delegation: boolean
+) {
+  let delegations = {};
+  let _addresses = addresses;
+  if (delegation) {
+    delegations = await getSpaceDelegations(space, addresses, network, snapshot);
+    _addresses = [];
+    Object.entries(delegations).forEach((d: any[]) => {
+      if (!d[1].out) _addresses.push(d[0]);
+      d[1].in.forEach((delegationIn) => _addresses.push(delegationIn));
+    });
+    _addresses = Object.keys(Object.fromEntries(_addresses.map((address) => [address, true])));
+  }
+
+  let result: any = {};
+  try {
+    const params = {
+      space,
+      network,
+      snapshot,
+      strategies,
+      addresses: _addresses
+    };
+    const res = await fetch(SCORE_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ params })
+    });
+    result = (await res.json()).result;
+  } catch (e) {
+    return Promise.reject(e);
+  }
+
+  if (delegation) {
+    result.scores = strategies.map((strategy, i) => {
+      const scoresByStrategy: any = {};
+      addresses.forEach((address) => {
+        scoresByStrategy[address] = 0;
+        if (!delegations[address].out) scoresByStrategy[address] += result.scores[i][address] || 0;
+        delegations[address].in.forEach(
+          (delegationIn) => (scoresByStrategy[address] += result.scores[i][delegationIn] || 0)
+        );
+      });
+      return Object.fromEntries(
+        Object.entries(scoresByStrategy).filter(([, score]: any[]) => score > 0)
+      );
+    });
+  }
+  return result;
 }
