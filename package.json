@@ -12,7 +12,7 @@
     "test": "jest"
   },
   "dependencies": {
-    "@ethersproject/address": "^5.6.1",
+    "@ethersproject/address": "^5.7.0",
     "@ethersproject/strings": "^5.6.1",
     "@snapshot-labs/snapshot.js": "^0.3.102"
   },
